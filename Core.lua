@@ -1,12 +1,13 @@
--- dillaHybridBar 0.3.8 - WoW Forever (Interface 16001)
+-- dillaHybridBar 0.3.9 - WoW Forever (Interface 16001)
 -- Independent secure buttons. Never reads or changes Blizzard action slots/gamepad bindings.
 local ADDON = ...
 local MAX_SLOTS, BUTTON_SIZE, GAP = 60, 38, 3
-local db, frame, optionsPanel, refreshOptions, minimapButton
+local db, frame, optionsPanel, refreshOptions, minimapButton, bindingOwner, bindingPanel, bindingInput, bindingText
 local openOptions
-local buttons = {}
+local buttons, bindingOverlays = {}, {}
+local bindingMode, selectedBindingSlot = false, nil
 local MINIMAP_RADIUS = 102 -- Outer edge of the native Forever minimap ring.
-local DEFAULT = { x = 0, y = -235, scale = 1, locked = false, slots = {}, slotCount = 12, columns = 12, rows = 1, gap = 3, opacity = 0.9, minimapAngle = 220, minimapHidden = false }
+local DEFAULT = { x = 0, y = -235, scale = 1, locked = false, slots = {}, slotCount = 12, columns = 12, rows = 1, gap = 3, opacity = 0.9, minimapAngle = 220, minimapHidden = false, keybinds = {} }
 
 local function say(message)
     print('|cff79c6ffdillaHybridBar:|r ' .. message)
@@ -129,6 +130,137 @@ local function applySlot(i)
     end
     updateIcon(i)
 end
+-- Bindings are temporary Blizzard overrides, stored permanently in our own DB.
+-- Never replace an existing binding silently, and never change overrides in combat.
+local function keyForSlot(i)
+    return db.keybinds and db.keybinds[i]
+end
+local function refreshHotkeys()
+    for i, button in ipairs(buttons) do
+        if button.hotkey then
+            local key = keyForSlot(i)
+            button.hotkey:SetText(key and (GetBindingText and GetBindingText(key, 'KEY_') or key) or '')
+        end
+    end
+end
+local function applyBindings()
+    if not bindingOwner or not db or inCombat() then return end
+    ClearOverrideBindings(bindingOwner)
+    for i = 1, math.min(db.slotCount, MAX_SLOTS) do
+        local key = keyForSlot(i)
+        if key and buttons[i] then
+            -- Preexisting normal bindings are not removed; they are overridden
+            -- only for keys that the user explicitly assigned to this addon.
+            SetOverrideBindingClick(bindingOwner, false, key, buttons[i]:GetName(), 'LeftButton')
+        end
+    end
+    refreshHotkeys()
+end
+local function stopBindingCapture()
+    selectedBindingSlot = nil
+    if bindingInput then
+        bindingInput:ClearFocus()
+        bindingInput:Hide()
+    end
+    if bindingText then bindingText:SetText('Click a highlighted slot to assign a key. ESC cancels key capture; X closes binding mode.') end
+end
+local setBindingMode
+local function bindingStatus(message)
+    if bindingText then bindingText:SetText(message) end
+end
+local function captureBinding(key)
+    local slot = selectedBindingSlot
+    if not slot or inCombat() or not key then return end
+    if key == 'ESCAPE' then stopBindingCapture(); return end
+    if key == 'LSHIFT' or key == 'RSHIFT' or key == 'LCTRL' or key == 'RCTRL'
+        or key == 'LALT' or key == 'RALT' or key == 'SHIFT' or key == 'CTRL' or key == 'ALT' then return end
+    if key == 'BACKSPACE' or key == 'DELETE' then
+        db.keybinds[slot] = nil
+        applyBindings()
+        stopBindingCapture()
+        bindingStatus('Slot ' .. slot .. ' cleared. Click another slot, or ESC to close.')
+        return
+    end
+    if IsShiftKeyDown() then key = 'SHIFT-' .. key end
+    if IsControlKeyDown() then key = 'CTRL-' .. key end
+    if IsAltKeyDown() then key = 'ALT-' .. key end
+    local existing = GetBindingAction and GetBindingAction(key, true) or ''
+    if existing and existing ~= '' and key ~= db.keybinds[slot] then
+        -- GetBindingAction may describe another addon or a normal game binding.
+        bindingStatus(key .. ' is already in use (' .. existing .. '). Choose another key.')
+        return
+    end
+    for i, bound in pairs(db.keybinds) do
+        if i ~= slot and bound == key then
+            bindingStatus(key .. ' is already assigned to slot ' .. i .. '. Choose another key.')
+            return
+        end
+    end
+    db.keybinds[slot] = key
+    applyBindings()
+    stopBindingCapture()
+    bindingStatus('Slot ' .. slot .. ': ' .. key .. '. Click another slot, or ESC to close.')
+end
+local function chooseBindingSlot(i)
+    if not bindingMode or inCombat() then return end
+    selectedBindingSlot = i
+    bindingStatus('Slot ' .. i .. ': press a key (Shift/Ctrl/Alt allowed); Backspace clears; ESC cancels.')
+    bindingInput:Show()
+    bindingInput:SetFocus()
+end
+setBindingMode = function(enabled)
+    if inCombat() then say('Keybinding mode is unavailable in combat.'); return end
+    bindingMode = enabled and true or false
+    stopBindingCapture()
+    if bindingPanel then bindingPanel:SetShown(bindingMode) end
+    for i, overlay in ipairs(bindingOverlays) do
+        overlay:SetShown(bindingMode and i <= db.slotCount)
+    end
+    if bindingMode then say('Keybinding mode enabled: click a slot, then press a key. X closes the mode.') end
+end
+local function createBindingUI()
+    bindingOwner = CreateFrame('Frame', 'dillaHybridBarBindingOwner', UIParent)
+    bindingPanel = CreateFrame('Frame', 'dillaHybridBarBindingPanel', UIParent, 'BackdropTemplate')
+    bindingPanel:SetSize(390, 86)
+    bindingPanel:SetPoint('TOP', UIParent, 'TOP', 0, -130)
+    bindingPanel:SetFrameStrata('DIALOG')
+    bindingPanel:SetBackdrop({ bgFile='Interface\\Buttons\\WHITE8X8', edgeFile='Interface\\Tooltips\\UI-Tooltip-Border', edgeSize=12, insets={left=3,right=3,top=3,bottom=3} })
+    bindingPanel:SetBackdropColor(.03,.04,.06,.95)
+    bindingPanel:Hide()
+    bindingText = bindingPanel:CreateFontString(nil, 'OVERLAY', 'GameFontHighlightSmall')
+    bindingText:SetPoint('TOPLEFT', 12, -14)
+    bindingText:SetPoint('RIGHT', -55, 0)
+    bindingText:SetJustifyH('LEFT')
+    bindingText:SetText('Click a highlighted slot to assign a key. ESC closes binding mode.')
+    local close = CreateFrame('Button', nil, bindingPanel, 'UIPanelCloseButton')
+    close:SetPoint('TOPRIGHT', 1, 1)
+    close:SetScript('OnClick', function() setBindingMode(false) end)
+    bindingInput = CreateFrame('EditBox', 'dillaHybridBarBindingInput', bindingPanel, 'InputBoxTemplate')
+    bindingInput:SetSize(200, 20)
+    bindingInput:SetPoint('BOTTOM', 0, 8)
+    bindingInput:SetAutoFocus(false)
+    bindingInput:SetMaxLetters(0)
+    bindingInput:EnableKeyboard(true)
+    bindingInput:SetScript('OnKeyDown', function(_, key) captureBinding(key) end)
+    bindingInput:SetScript('OnEscapePressed', function() stopBindingCapture() end)
+    bindingInput:Hide()
+    for i, button in ipairs(buttons) do
+        local overlay = CreateFrame('Button', nil, frame)
+        overlay:SetAllPoints(button)
+        overlay:SetFrameLevel(button:GetFrameLevel() + 15)
+        local shade = overlay:CreateTexture(nil, 'OVERLAY')
+        shade:SetAllPoints()
+        shade:SetColorTexture(.1,.45,.85,.28)
+        local label = overlay:CreateFontString(nil,'OVERLAY','GameFontNormalSmall')
+        label:SetPoint('CENTER')
+        label:SetText('BIND')
+        overlay:SetScript('OnClick', function() chooseBindingSlot(i) end)
+        overlay:Hide()
+        bindingOverlays[i] = overlay
+    end
+    applyBindings()
+end
+
 local function updateAll()
     for i = 1, MAX_SLOTS do applySlot(i) end
     updateCooldowns()
@@ -210,6 +342,10 @@ local function makeButton(i)
     count:SetJustifyH('RIGHT')
     count:SetText('')
     button.count = count
+    local hotkey = button:CreateFontString(nil, 'OVERLAY', 'NumberFontNormalSmall')
+    hotkey:SetPoint('TOPRIGHT', button, 'TOPRIGHT', -3, -3)
+    hotkey:SetJustifyH('RIGHT')
+    button.hotkey = hotkey
     local cooldown = CreateFrame('Cooldown', nil, button, 'CooldownFrameTemplate')
     cooldown:SetAllPoints(icon)
     button.cooldown = cooldown
@@ -247,6 +383,10 @@ local function applyLayout()
             button:Hide()
         end
     end
+    if bindingMode then
+        for i, overlay in ipairs(bindingOverlays) do overlay:SetShown(i <= count) end
+    end
+    if bindingOwner then applyBindings() end
 end
 local function updateLock()
     if not frame then return end
@@ -311,7 +451,9 @@ local function createMinimapButton()
     icon:SetSize(20, 20)
     icon:SetPoint('CENTER', 0, 0)
     button:SetScript('OnClick', function(_, mouse)
-        if mouse == 'RightButton' then
+        if mouse == 'LeftButton' and IsControlKeyDown() then
+            setBindingMode(not bindingMode)
+        elseif mouse == 'RightButton' then
             if inCombat() then say('Leiste im Kampf nicht sperren/entsperren.'); return end
             db.locked = not db.locked
             updateLock()
@@ -342,6 +484,7 @@ local function createMinimapButton()
         GameTooltip:AddLine('Left click: Options', .8, .8, .8)
         GameTooltip:AddLine('Right click: Lock/unlock bar', .8, .8, .8)
         GameTooltip:AddLine('Shift + left click: Show/hide bar', .8, .8, .8)
+        GameTooltip:AddLine('Ctrl + Left-click: Bind Keys', .8, .8, .8)
         GameTooltip:AddLine('Drag: Move minimap button', .8, .8, .8)
         GameTooltip:Show()
     end)
@@ -432,6 +575,15 @@ local function createOptions()
         if minimapButton then minimapButton:SetShown(not db.minimapHidden) end
     end)
 
+    local bindKeys = CreateFrame('Button', nil, optionsPanel, 'UIPanelButtonTemplate')
+    bindKeys:SetPoint('TOPLEFT', 230, -545)
+    bindKeys:SetSize(152, 24)
+    bindKeys:SetText('Bind Keys')
+    bindKeys:SetScript('OnClick', function()
+        if SettingsPanel and SettingsPanel:IsShown() then SettingsPanel:Hide() end
+        setBindingMode(not bindingMode)
+    end)
+
     local reset = CreateFrame('Button', nil, optionsPanel, 'UIPanelButtonTemplate')
     reset:SetPoint('TOPLEFT', 22, -545)
     reset:SetSize(174, 24)
@@ -483,6 +635,7 @@ local function initialize()
         if db[key] == nil then db[key] = value end
     end
     db.slots = db.slots or {}
+    db.keybinds = db.keybinds or {}
     db.slotCount = math.max(1, math.min(MAX_SLOTS, tonumber(db.slotCount) or 12))
     -- v0.1.0 stored spellbook INDEX as if it were the Spell ID.
     -- Existing spell entries cannot be recovered reliably; clear them once.
@@ -535,6 +688,7 @@ local function initialize()
     applyLayout()
     placeFrame()
     updateLock()
+    createBindingUI()
     createOptions()
     createMinimapButton()
     updateAll()
@@ -554,6 +708,8 @@ SlashCmdList.DILLAHYBRIDBAR = function(message)
     elseif command == 'unlock' then
         if inCombat() then say('Nicht im Kampf entsperren.'); return end
         db.locked = false; updateLock(); if refreshOptions then refreshOptions() end; say('Leiste entsperrt (am MOVE-Griff ziehen).')
+    elseif command == 'bind' then
+        setBindingMode(not bindingMode)
     elseif command == 'slots' then
         local n = tonumber(arg)
         if not n or n ~= math.floor(n) or n < 1 or n > MAX_SLOTS then say('Usage: /dhb slots 1-' .. MAX_SLOTS); return end
@@ -581,7 +737,7 @@ SlashCmdList.DILLAHYBRIDBAR = function(message)
         if inCombat() then say('Nicht waehrend des Kampfes verstecken.'); return end
         frame:Hide()
     else
-        say('Befehle: /dhb (Options) | config | lock | unlock | slots 1-60 | scale 0.5-2 | reset | show | hide')
+        say('Befehle: /dhb (Options) | config | lock | unlock | slots 1-60 | scale 0.5-2 | bind | reset | show | hide')
         say('Shift+Rechtsklick leert einen Slot (ausserhalb des Kampfes).')
     end
 end

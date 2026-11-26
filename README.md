@@ -4,7 +4,7 @@ A compact, independent action bar for **World of Warcraft Forever**, designed fo
 
 The addon uses its own secure action buttons and does not modify Blizzard's gamepad UI, controller bindings, or standard action-bar slots.
 
-**Version:** 0.3.8  
+**Version:** 0.3.9  
 **WoW interface:** 16001  
 **Dependencies:** None
 
@@ -18,6 +18,7 @@ The addon uses its own secure action buttons and does not modify Blizzard's game
 - Position and settings saved per character; reducing active slots preserves hidden assignments.
 - Minimal locked appearance, with a separate `MOVE` handle while unlocked.
 - Draggable minimap launcher with direct access to addon options.
+- Keyboard shortcuts for slots, with an in-game Bind Keys mode and hotkey labels.
 - No external libraries or ConsolePort requirement.
 
 ## Installation
@@ -45,6 +46,7 @@ Open settings with `/dhb`, through **Options → AddOns → dillaHybridBar**, or
 | Left-click | Open dillaHybridBar options |
 | Right-click | Lock / unlock the bar |
 | Shift + left-click | Show / hide the bar |
+| Ctrl + left-click | Toggle Bind Keys mode |
 | Left-drag | Move the launcher around the minimap |
 
 ### Slash commands
@@ -60,6 +62,13 @@ Open settings with `/dhb`, through **Options → AddOns → dillaHybridBar**, or
 | `/dhb reset` | Reset layout and position, retaining assignments |
 | `/dhb show` | Show the bar |
 | `/dhb hide` | Hide the bar |
+| `/dhb bind` | Toggle Bind Keys mode |
+
+## Keybindings
+
+Open **Options → AddOns → dillaHybridBar → Bind Keys**, use **Ctrl + left-click** on the minimap button, or enter `/dhb bind`. Click a highlighted slot, then press a key, optionally with Shift/Ctrl/Alt. **Backspace/Delete** clears the slot's key, **Esc** cancels the current capture. Use the panel's **X** to exit.
+
+Keys already assigned to other actions are rejected rather than silently overridden. Bindings are saved per character and restored after reload. Only visible slots are bound. Assignment and removal are disabled in combat.
 
 ## Configuration
 
@@ -74,6 +83,9 @@ Saved settings use **`dillaHybridBarDB`** as character-specific SavedVariables. 
 - This addon targets WoW Forever; compatibility with other game clients is not guaranteed.
 
 ## Changelog
+
+### 0.3.9
+- Add per-slot keyboard bindings, on-button hotkey labels, Bind Keys option, and Ctrl + left-click minimap shortcut.
 
 ### 0.3.8
 - Display item stack counts on item buttons and update them when inventory changes.
@@ -113,4 +125,4 @@ Saved settings use **`dillaHybridBarDB`** as character-specific SavedVariables. 
 
 ## Development note
 
-Version 0.3.8 was tested by the project owner in WoW Forever. The GitHub publication itself does not imply a new in-game regression test.
+Version 0.3.8 was tested by the project owner in WoW Forever. Version 0.3.9's keybinding additions have not yet been tested in the WoW Forever client.
