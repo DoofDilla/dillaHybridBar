@@ -4,13 +4,13 @@ A compact, independent action bar for **World of Warcraft Forever**, designed fo
 
 The addon uses its own secure action buttons and does not modify Blizzard's gamepad UI, controller bindings, or standard action-bar slots.
 
-**Version:** 0.3.9  
+**Version:** 0.3.10  
 **WoW interface:** 16001  
 **Dependencies:** None
 
 ## Features
 
-- Place spells, items, and macros directly on the bar via drag and drop.
+- Place spells, items, macros, and mounts from the Mount Collection directly on the bar via drag and drop.
 - Configure **1–60 active slots**, columns, rows, button spacing, scale, and background opacity.
 - Mouse-clickable secure buttons, including in combat.
 - Spell cooldown indicators using Forever-compatible duration objects.
@@ -33,7 +33,7 @@ Ensure `Core.lua` and `dillaHybridBar.toc` are directly inside that folder. Rest
 
 ## Usage
 
-Drag a spell, item, or macro onto an empty button. **Left-click** to use it. **Shift + right-click** a button to clear it (outside combat).
+Drag a spell, item, macro, or mount from the Mount Collection onto an empty button. **Left-click** to use it. **Shift + right-click** a button to clear it (outside combat).
 
 When unlocked, drag the small `MOVE` handle to reposition the bar. The handle is hidden when locked.
 
@@ -84,6 +84,9 @@ Saved settings use **`dillaHybridBarDB`** as character-specific SavedVariables. 
 
 ## Changelog
 
+### 0.3.10
+- Accept mounts dragged from the Mount Collection, resolving mount IDs to summon spell IDs while preserving existing secure button behavior.
+
 ### 0.3.9
 - Add per-slot keyboard bindings, on-button hotkey labels, Bind Keys option, and Ctrl + left-click minimap shortcut.
 
@@ -125,4 +128,4 @@ Saved settings use **`dillaHybridBarDB`** as character-specific SavedVariables. 
 
 ## Development note
 
-Version 0.3.8 was tested by the project owner in WoW Forever. Version 0.3.9's keybinding additions have not yet been tested in the WoW Forever client.
+Version 0.3.8 was tested by the project owner in WoW Forever. Version 0.3.9's keybinding additions and 0.3.10's mount drag-and-drop have not yet been tested in the WoW Forever client.

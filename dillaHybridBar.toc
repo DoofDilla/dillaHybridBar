@@ -2,7 +2,7 @@
 ## Title: dillaHybridBar
 ## Notes: Independent mouse-clickable action bar for WoW Forever gamepad hybrid play.
 ## Author: Dilla + ChatGPT
-## Version: 0.3.9
+## Version: 0.3.10
 ## SavedVariablesPerCharacter: dillaHybridBarDB
 
 Core.lua

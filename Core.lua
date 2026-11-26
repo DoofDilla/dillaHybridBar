@@ -1,4 +1,4 @@
--- dillaHybridBar 0.3.9 - WoW Forever (Interface 16001)
+-- dillaHybridBar 0.3.10 - WoW Forever (Interface 16001)
 -- Independent secure buttons. Never reads or changes Blizzard action slots/gamepad bindings.
 local ADDON = ...
 local MAX_SLOTS, BUTTON_SIZE, GAP = 60, 38, 3
@@ -269,10 +269,24 @@ end
 local function assignCursor(i)
     if inCombat() then say('Belegung im Kampf gesperrt.'); return end
     local kind, cursorId, bookType, spellId = GetCursorInfo()
-    if kind ~= 'spell' and kind ~= 'item' and kind ~= 'macro' then return end
-    -- For spell cursors, the SECOND return is the spellbook slot index,
-    -- NOT the Spell ID. The FOURTH return is the actual Spell ID.
+    if kind ~= 'spell' and kind ~= 'item' and kind ~= 'macro' and kind ~= 'mount' then return end
+    -- Mounts dragged from the collection have a mount ID, not a spell ID.
+    -- Resolve it once and store it as a normal spell assignment so secure
+    -- execution, icon, tooltip, cooldown, and keybindings remain unchanged.
     local id = kind == 'spell' and spellId or cursorId
+    if kind == 'mount' then
+        if not (C_MountJournal and C_MountJournal.GetMountInfoByID) then
+            say('Mount Journal API unavailable; mount not assigned.')
+            return
+        end
+        local _, mountSpellID = C_MountJournal.GetMountInfoByID(cursorId)
+        if type(mountSpellID) ~= 'number' or mountSpellID <= 0
+            or (issecretvalue and issecretvalue(mountSpellID)) then
+            say('Could not resolve mount spell; slot unchanged.')
+            return
+        end
+        kind, id = 'spell', mountSpellID
+    end
     if kind == 'spell' and (type(id) ~= 'number' or id <= 0) then
         -- Prefer the actual spell ID; never accidentally save a book index.
         if C_SpellBook and C_SpellBook.GetSpellBookItemInfo and type(cursorId) == 'number' then
