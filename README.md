@@ -4,7 +4,7 @@ A compact, independent action bar for **World of Warcraft Forever**, designed fo
 
 The addon uses its own secure action buttons and does not modify Blizzard's gamepad UI, controller bindings, or standard action-bar slots.
 
-**Version:** 0.3.10  
+**Version:** 0.3.11  
 **WoW interface:** 16001  
 **Dependencies:** None
 
@@ -84,6 +84,10 @@ Saved settings use **`dillaHybridBarDB`** as character-specific SavedVariables. 
 
 ## Changelog
 
+### 0.3.11
+- Summon Mount Collection entries via the native mount journal API instead of casting their spell ID.
+- Preserve mount IDs and migrate v0.3.10 mount spell assignments where recognized by the journal.
+
 ### 0.3.10
 - Accept mounts dragged from the Mount Collection, resolving mount IDs to summon spell IDs while preserving existing secure button behavior.
 
@@ -128,4 +132,4 @@ Saved settings use **`dillaHybridBarDB`** as character-specific SavedVariables. 
 
 ## Development note
 
-Version 0.3.8 was tested by the project owner in WoW Forever. Version 0.3.9's keybinding additions and 0.3.10's mount drag-and-drop have not yet been tested in the WoW Forever client.
+Version 0.3.8 was tested by the project owner in WoW Forever. Version 0.3.9's keybinding additions and 0.3.11's native mount summoning have not yet been tested in the WoW Forever client.

@@ -1,4 +1,4 @@
--- dillaHybridBar 0.3.10 - WoW Forever (Interface 16001)
+-- dillaHybridBar 0.3.11 - WoW Forever (Interface 16001)
 -- Independent secure buttons. Never reads or changes Blizzard action slots/gamepad bindings.
 local ADDON = ...
 local MAX_SLOTS, BUTTON_SIZE, GAP = 60, 38, 3
@@ -26,6 +26,11 @@ end
 local function itemIcon(id)
     if C_Item and C_Item.GetItemIconByID then return C_Item.GetItemIconByID(id) end
 end
+local function mountInfo(id)
+    if C_MountJournal and C_MountJournal.GetMountInfoByID then
+        return C_MountJournal.GetMountInfoByID(id)
+    end
+end
 local function getMacroIcon(id)
     if GetMacroInfo then
         local _, icon = GetMacroInfo(id)
@@ -40,7 +45,11 @@ local function updateIcon(i)
     if slot then
         if slot.kind == 'spell' then icon = spellIcon(slot.id)
         elseif slot.kind == 'item' then icon = itemIcon(slot.id)
-        elseif slot.kind == 'macro' then icon = getMacroIcon(slot.id) end
+        elseif slot.kind == 'macro' then icon = getMacroIcon(slot.id)
+        elseif slot.kind == 'mount' then
+            local _, _, mountIcon = mountInfo(slot.id)
+            icon = mountIcon
+        end
     end
     button.icon:SetTexture(icon or 'Interface\\Buttons\\UI-Quickslot2')
     button.icon:SetDesaturated(not slot)
@@ -74,6 +83,9 @@ local function updateCooldowns()
         local id, kind
         if slot then
             kind, id = slot.kind, slot.id
+            if kind == 'mount' then
+                if slot.spellID then kind, id = 'spell', slot.spellID end
+            end
             if kind == 'macro' then
                 if GetMacroSpell then
                     local spell = GetMacroSpell(id)
@@ -127,6 +139,9 @@ local function applySlot(i)
             button:SetAttribute('type', 'macro')
             button:SetAttribute('macro', slot.id)
         end
+        -- Mount slots deliberately have no secure spell action: they use
+        -- C_MountJournal.SummonByID directly from the user's button click.
+        -- Other secure button types are entirely unchanged.
     end
     updateIcon(i)
 end
@@ -270,22 +285,22 @@ local function assignCursor(i)
     if inCombat() then say('Belegung im Kampf gesperrt.'); return end
     local kind, cursorId, bookType, spellId = GetCursorInfo()
     if kind ~= 'spell' and kind ~= 'item' and kind ~= 'macro' and kind ~= 'mount' then return end
-    -- Mounts dragged from the collection have a mount ID, not a spell ID.
-    -- Resolve it once and store it as a normal spell assignment so secure
-    -- execution, icon, tooltip, cooldown, and keybindings remain unchanged.
     local id = kind == 'spell' and spellId or cursorId
+    local mountSpellID
     if kind == 'mount' then
-        if not (C_MountJournal and C_MountJournal.GetMountInfoByID) then
-            say('Mount Journal API unavailable; mount not assigned.')
+        -- Keep the journal mount ID for native summoning. The summoning spell
+        -- ID is metadata only (cooldowns); it cannot reliably be cast as a
+        -- regular spell in Forever.
+        if type(cursorId) ~= 'number' or (issecretvalue and issecretvalue(cursorId)) then
+            say('Could not read mount ID; slot unchanged.')
             return
         end
-        local _, mountSpellID = C_MountJournal.GetMountInfoByID(cursorId)
-        if type(mountSpellID) ~= 'number' or mountSpellID <= 0
-            or (issecretvalue and issecretvalue(mountSpellID)) then
-            say('Could not resolve mount spell; slot unchanged.')
+        local mountName
+        mountName, mountSpellID = mountInfo(cursorId)
+        if not mountName then
+            say('Could not resolve Mount Collection entry; slot unchanged.')
             return
         end
-        kind, id = 'spell', mountSpellID
     end
     if kind == 'spell' and (type(id) ~= 'number' or id <= 0) then
         -- Prefer the actual spell ID; never accidentally save a book index.
@@ -298,7 +313,7 @@ local function assignCursor(i)
         say('Dieser Cursor-Typ liefert keine numerische ID. Slot wurde nicht geaendert.')
         return
     end
-    db.slots[i] = { kind = kind, id = id }
+    db.slots[i] = { kind = kind, id = id, spellID = mountSpellID }
     applySlot(i)
     updateCooldowns()
     updateCounts()
@@ -310,7 +325,7 @@ local function tooltip(button)
     GameTooltip:SetOwner(button, 'ANCHOR_RIGHT')
     if not slot then
         GameTooltip:AddLine('Leerer Slot')
-        GameTooltip:AddLine('Zauber, Item oder Makro hierher ziehen.', .8, .8, .8)
+        GameTooltip:AddLine('Zauber, Item, Makro oder Mount hierher ziehen.', .8, .8, .8)
     elseif slot.kind == 'spell' then
         GameTooltip:SetSpellByID(slot.id)
     elseif slot.kind == 'item' then
@@ -319,6 +334,9 @@ local function tooltip(button)
         local name = GetMacroInfo(slot.id)
         GameTooltip:AddLine(name or ('Makro #' .. slot.id))
         GameTooltip:AddLine('Makro (Index ' .. slot.id .. ')', .7, .7, .7)
+    elseif slot.kind == 'mount' then
+        local name = mountInfo(slot.id)
+        GameTooltip:AddLine(name or 'Mount')
     end
     GameTooltip:AddLine('Shift + Rechtsklick: Slot leeren', .5, .8, 1)
     GameTooltip:Show()
@@ -363,6 +381,17 @@ local function makeButton(i)
     local cooldown = CreateFrame('Cooldown', nil, button, 'CooldownFrameTemplate')
     cooldown:SetAllPoints(icon)
     button.cooldown = cooldown
+    -- Secure actions still handle spells/items/macros. Mounts use the
+    -- native journal summoning API when a mouse click or binding clicks this
+    -- same button. Do not duplicate the call on mouse-down.
+    button:HookScript('OnClick', function(self, mouseButton, down)
+        if mouseButton ~= 'LeftButton' or down then return end
+        local slot = db and db.slots[self.index]
+        if slot and slot.kind == 'mount' and C_MountJournal
+            and C_MountJournal.SummonByID and not inCombat() then
+            C_MountJournal.SummonByID(slot.id)
+        end
+    end)
     button:SetScript('OnReceiveDrag', function(self) assignCursor(self.index) end)
     button:HookScript('OnMouseUp', function(self, mouseButton)
         if mouseButton == 'RightButton' and IsShiftKeyDown() then
@@ -650,6 +679,20 @@ local function initialize()
     end
     db.slots = db.slots or {}
     db.keybinds = db.keybinds or {}
+    -- Migration from v0.3.10: that version stored dragged mounts as spells.
+    -- Identify only spells that the journal confirms are mount summon spells.
+    if C_MountJournal and C_MountJournal.GetMountFromSpell then
+        for i = 1, MAX_SLOTS do
+            local slot = db.slots[i]
+            if slot and slot.kind == 'spell' then
+                local mountID = C_MountJournal.GetMountFromSpell(slot.id)
+                if type(mountID) == 'number' and not (issecretvalue and issecretvalue(mountID))
+                    and mountID > 0 then
+                    db.slots[i] = { kind = 'mount', id = mountID, spellID = slot.id }
+                end
+            end
+        end
+    end
     db.slotCount = math.max(1, math.min(MAX_SLOTS, tonumber(db.slotCount) or 12))
     -- v0.1.0 stored spellbook INDEX as if it were the Spell ID.
     -- Existing spell entries cannot be recovered reliably; clear them once.
